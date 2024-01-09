@@ -37,11 +37,14 @@ public class OptionalAuthorizationHeaderFilter
   @Override
   public GatewayFilter apply(Config config) {
     return ((exchange, chain) -> {
-      log.info("AuthorizationHeaderFilter's apply executes");
+      log.info("OptionalAuthorizationHeaderFilter's apply executes");
 
       ServerHttpRequest request = exchange.getRequest();
       if (request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
+
+        log.info("[Authorization value]: " + request.getHeaders().get(HttpHeaders.AUTHORIZATION));
         if (request.getHeaders().get(HttpHeaders.AUTHORIZATION) == null) {
+          //          return chain.filter(exchange);
           return onError(exchange, CustomErrMessage.NOT_VALID_JWT_TOKEN);
         }
 
@@ -72,11 +75,12 @@ public class OptionalAuthorizationHeaderFilter
         } catch (MalformedJwtException e) {
           return onError(exchange, CustomErrMessage.MALFORMED_JWT_TOKEN);
         } catch (ExpiredJwtException e) { // access-token 만료
-          return onError(exchange, CustomErrMessage.EXPIRED_JWT_TOKEN);
+          return onErrorByExpiration(exchange, CustomErrMessage.EXPIRED_JWT_TOKEN);
         } catch (SignatureException e) {
           return onError(exchange, CustomErrMessage.WRONG_JWT_SIGNATURE);
         }
       } else {
+        log.info("[Non-Login OK]..");
         return chain.filter(exchange);
       }
 
@@ -89,6 +93,15 @@ public class OptionalAuthorizationHeaderFilter
       throws IllegalArgumentException, ExpiredJwtException, SignatureException {
 
     return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(jwt).getBody();
+  }
+
+  private Mono<Void> onErrorByExpiration(ServerWebExchange exchange, String error) {
+
+    ServerHttpResponse response = exchange.getResponse();
+    response.setStatusCode(HttpStatus.valueOf(418));
+
+    log.error(error);
+    return response.setComplete();
   }
 
   private Mono<Void> onError(ServerWebExchange exchange, String error) {
